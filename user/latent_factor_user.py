@@ -55,10 +55,10 @@ class BaseLatentFactorUserSimulator(object):
     (this entails [num_events,n_items] independent bernoulli trials).
     Steps 1 and 3 compute the appearance and conversion probabilities prior to the Bernoulli draws.
 
-    The update_user_state() method updates the state of the users who appeared in the current step:
+    The update_user_state() method updates the state of the users who have appeared so far.
     1. It updates the latent factors for all users who have appeared in any past time steps
     (latent factors have a slow drift in time).
-    2. It updates the appearance logs of the users who appear.
+    2. It updates the appearance logs of the users who appeared in the last step.
     3. It updates the impression logs for the user/item pairs which occurred.
     4. It updates the conversion logs for the user/item pairs which occurred.
     """
@@ -88,19 +88,26 @@ class BaseLatentFactorUserSimulator(object):
         """
         Create labeled events for a single time step.
         Returns:
-            (np.ndarray, np.ndarray, int)
-                x are the features for the users who appeared.
-                y are the potential binary outcomes should a user see an item.
-                batch_number is the number of the current batch, starting at zero.
+            (np.array, np.array, np.array, int)
+                ids are the ids of users who appeared.
+                xs are the features for the users who appeared.
+                potential_outcomes are the potential binary outcomes should a user see an item.
+                current_batch is the number of the current batch, starting at zero.
         """
         p_rs = self.get_return_probabilities()
         ids = self.get_return_users(p_rs)
         p_cs = self.get_conversion_probabilities(ids)
-        outcomes = self.get_conversion_outcomes(p_cs)
+        potetnial_outcomes = self.get_conversion_outcomes(p_cs)
         xs = self.get_user_features(ids)
         current_batch = self.batch_number
         self.batch_number += 1
-        return ids, xs, outcomes, current_batch
+        return ids, xs, potetnial_outcomes, current_batch
+
+    def update_user_state(self, ids, impressions, outcomes):
+        self.update_factors()
+        self.update_user_init_times(ids)
+        self.update_user_impressions(ids, impressions)
+        
 
     def initialize_factors(self):
         """
@@ -200,31 +207,6 @@ class BaseLatentFactorUserSimulator(object):
         assert (ps.shape == (self.n_users,self.n_items))
         return self.independent_bernoulli_trials(ps)
 
-    def sample_users_in_epoch(self, time_steps):
-        # TODO: if I sample users for the entire epoch, I cannot know how much their probabilities have decayed.
-        # TODO: sample once per epoch and apply decay per epoch. Or: epoch has batches, sample in batches then combine
-        """
-        Sample users who appear during an epoch.
-        Args:
-            time_steps (int): Time steps in an epoch
-
-        Returns:
-            (tuple(list[int], list[float])): ids of users who appeared, and their appearance times.
-        """
-        return
-
-    def measure_users_in_epoch(self, users, items):
-        """
-        Determine if users presented with items converted.
-        Args:
-            users (list[int]): The user ids
-            items (list[int]): The item ids
-
-        Returns:
-            list[int]: The outcomes of the measurements.
-        """
-        return
-
     def _activity_decay_curve(self, t):
         """
         Curve which describes reduction of user log odds to return as time passes.
@@ -249,12 +231,23 @@ class BaseLatentFactorUserSimulator(object):
         """
         return
 
-    def update_user_init_times(self, users, times):
+    def update_user_init_times(self, ids):
         """
-        Updates user init times with the time users were first seen.
+        Updates user init times with the current time step for users who first appeared now.
         Args:
-            users (list[int]): The ids of users who visited.
-            times (list[float]): The times each user visited.
+            ids (numpy.array): The ids of users who visited.
+
+        Returns:
+            None
+        """
+        return
+
+    def update_user_impressions(self, ids, impressions):
+        """
+        Update the impression logs for users who appeared in the current batch.
+        Args:
+            ids (np.array): ids of the users who appeared
+            impressions (np.array): one hot encoded impressions for the items  the users saw
 
         Returns:
             None
